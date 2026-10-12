@@ -1,65 +1,46 @@
-// =====================================================
-// SERVICIO WEB DE REGISTRO E INICIO DE SESIÓN
-// Evidencia: GA7-220501096-AA5-EV01
-// Proyecto: EduKit
-// =====================================================
 
-// Importamos Express para crear el servidor web.
 const express = require("express");
 
-// Creamos una instancia de la aplicación.
 const app = express();
-
-// Definimos el puerto donde funcionará el servicio.
 const PORT = 3000;
 
-// Permite que Express pueda recibir información en formato JSON.
 app.use(express.json());
 
-// -----------------------------------------------------
-// BASE DE DATOS TEMPORAL
-// -----------------------------------------------------
-// Para esta evidencia utilizaremos un arreglo en memoria.
-// Más adelante podría reemplazarse por una base de datos.
+// Base de datos temporal
 const usuarios = [];
+const donaciones = [];
 
-// -----------------------------------------------------
-// RUTA PRINCIPAL
-// -----------------------------------------------------
-// Permite comprobar que el servicio web está funcionando.
+let siguienteIdDonacion = 1;
+
+// Ruta principal
 app.get("/", (req, res) => {
     res.json({
-        mensaje: "Servicio web de autenticación EduKit funcionando correctamente"
+        mensaje: "API de EduKit funcionando correctamente"
     });
 });
 
-// -----------------------------------------------------
-// REGISTRO DE USUARIO
-// -----------------------------------------------------
-// Método: POST
-// Ruta: /api/registro
-//
-// Recibe:
-// {
-//     "usuario": "pablo",
-//     "contrasena": "123456"
-// }
+// Consultar usuarios
+app.get("/api/usuarios", (req, res) => {
+    res.json(usuarios.map(({ contrasena, ...usuario }) => usuario));
+});
 
+// Registrar usuario
 app.post("/api/registro", (req, res) => {
+    const { usuario, contrasena } = req.body || {};
 
-    // Obtenemos los datos enviados por el usuario.
-    const { usuario, contrasena } = req.body;
-
-    // Verificamos que los campos sean obligatorios.
-    if (!usuario || !contrasena) {
+    if (
+        typeof usuario !== "string" || !usuario.trim() ||
+        typeof contrasena !== "string" || !contrasena.trim()
+    ) {
         return res.status(400).json({
             error: "El usuario y la contraseña son obligatorios"
         });
     }
 
-    // Verificamos si el usuario ya existe.
+    const nombreUsuario = usuario.trim();
+
     const usuarioExistente = usuarios.find(
-        (item) => item.usuario === usuario
+        (item) => item.usuario === nombreUsuario
     );
 
     if (usuarioExistente) {
@@ -68,59 +49,218 @@ app.post("/api/registro", (req, res) => {
         });
     }
 
-    // Guardamos el nuevo usuario.
     usuarios.push({
-        usuario: usuario,
-        contrasena: contrasena
+        usuario: nombreUsuario,
+        contrasena
     });
 
-    // Respondemos confirmando el registro.
     res.status(201).json({
         mensaje: "Usuario registrado correctamente"
     });
 });
 
-// -----------------------------------------------------
-// INICIO DE SESIÓN
-// -----------------------------------------------------
-// Método: POST
-// Ruta: /api/login
-//
-// Recibe:
-// {
-//     "usuario": "pablo",
-//     "contrasena": "123456"
-// }
-
+// Iniciar sesión
 app.post("/api/login", (req, res) => {
+    const { usuario, contrasena } = req.body || {};
 
-    // Obtenemos los datos enviados.
-    const { usuario, contrasena } = req.body;
-
-    // Buscamos un usuario que coincida con los datos.
     const usuarioEncontrado = usuarios.find(
         (item) =>
             item.usuario === usuario &&
             item.contrasena === contrasena
     );
 
-    // Si encontramos el usuario, la autenticación es correcta.
-    if (usuarioEncontrado) {
-        return res.status(200).json({
-            mensaje: "Autenticación satisfactoria"
+    if (!usuarioEncontrado) {
+        return res.status(401).json({
+            error: "Error en la autenticación"
         });
     }
 
-    // Si no coincide, devolvemos un error de autenticación.
-    res.status(401).json({
-        error: "Error en la autenticación"
+    res.status(200).json({
+        mensaje: "Autenticación satisfactoria"
     });
 });
 
-// -----------------------------------------------------
-// INICIAR SERVIDOR
-// -----------------------------------------------------
+// Consultar todas las donaciones
+app.get("/api/donaciones", (req, res) => {
+    res.json(donaciones);
+});
 
+// Consultar una donación por su ID
+app.get("/api/donaciones/:id", (req, res) => {
+    const id = Number(req.params.id);
+
+    const donacion = donaciones.find(
+        (item) => item.id === id
+    );
+
+    if (!donacion) {
+        return res.status(404).json({
+            error: "Donación no encontrada"
+        });
+    }
+
+    res.json(donacion);
+});
+
+// Crear una donación
+app.post("/api/donaciones", (req, res) => {
+    const {
+        titulo,
+        descripcion,
+        categoria,
+        cantidad,
+        ubicacion,
+        donante
+    } = req.body || {};
+
+    if (
+        typeof titulo !== "string" || !titulo.trim() ||
+        typeof descripcion !== "string" || !descripcion.trim() ||
+        typeof categoria !== "string" || !categoria.trim() ||
+        typeof ubicacion !== "string" || !ubicacion.trim() ||
+        typeof donante !== "string" || !donante.trim() ||
+        cantidad === undefined || cantidad === null ||
+        cantidad === "" || !Number.isInteger(Number(cantidad)) ||
+        Number(cantidad) < 1
+    ) {
+        return res.status(400).json({
+            error: "Completa los campos y registra una cantidad entera mayor que cero"
+        });
+    }
+
+    const nuevaDonacion = {
+        id: siguienteIdDonacion++,
+        titulo: titulo.trim(),
+        descripcion: descripcion.trim(),
+        categoria: categoria.trim(),
+        cantidad: Number(cantidad),
+        ubicacion: ubicacion.trim(),
+        donante: donante.trim(),
+        estado: "Disponible"
+    };
+
+    donaciones.push(nuevaDonacion);
+
+    res.status(201).json({
+        mensaje: "Donación publicada correctamente",
+        donacion: nuevaDonacion
+    });
+});
+
+// Actualizar una donación
+app.put("/api/donaciones/:id", (req, res) => {
+    const id = Number(req.params.id);
+
+    const donacion = donaciones.find(
+        (item) => item.id === id
+    );
+
+    if (!donacion) {
+        return res.status(404).json({
+            error: "Donación no encontrada"
+        });
+    }
+
+    const camposPermitidos = [
+        "titulo",
+        "descripcion",
+        "categoria",
+        "cantidad",
+        "ubicacion",
+        "donante",
+        "estado"
+    ];
+
+    const datos = req.body || {};
+    const camposEnviados = Object.keys(datos);
+
+    if (camposEnviados.length === 0) {
+        return res.status(400).json({
+            error: "Debes enviar al menos un campo para actualizar"
+        });
+    }
+
+    const campoInvalido = camposEnviados.some(
+        (campo) => !camposPermitidos.includes(campo)
+    );
+
+    if (campoInvalido) {
+        return res.status(400).json({
+            error: "Uno o más campos no están permitidos"
+        });
+    }
+
+    for (const campo of camposEnviados) {
+        if (
+            typeof datos[campo] !== "string" ||
+            !datos[campo].trim()
+        ) {
+            if (campo !== "cantidad") {
+                return res.status(400).json({
+                    error: `El campo ${campo} no puede estar vacío`
+                });
+            }
+        }
+    }
+
+    if (
+        datos.cantidad !== undefined &&
+        (
+            datos.cantidad === null ||
+            datos.cantidad === "" ||
+            !Number.isInteger(Number(datos.cantidad)) ||
+            Number(datos.cantidad) < 1
+        )
+    ) {
+        return res.status(400).json({
+            error: "La cantidad debe ser un entero mayor que cero"
+        });
+    }
+
+    if (
+        datos.estado !== undefined &&
+        !["Disponible", "Reservada", "Entregada"].includes(datos.estado)
+    ) {
+        return res.status(400).json({
+            error: "El estado debe ser Disponible, Reservada o Entregada"
+        });
+    }
+
+    for (const campo of camposEnviados) {
+        donacion[campo] =
+            campo === "cantidad"
+                ? Number(datos[campo])
+                : datos[campo].trim();
+    }
+
+    res.json({
+        mensaje: "Donación actualizada correctamente",
+        donacion
+    });
+});
+
+// Eliminar una donación
+app.delete("/api/donaciones/:id", (req, res) => {
+    const id = Number(req.params.id);
+
+    const indice = donaciones.findIndex(
+        (item) => item.id === id
+    );
+
+    if (indice === -1) {
+        return res.status(404).json({
+            error: "Donación no encontrada"
+        });
+    }
+
+    donaciones.splice(indice, 1);
+
+    res.json({
+        mensaje: "Donación eliminada correctamente"
+    });
+});
+
+// Iniciar servidor
 app.listen(PORT, () => {
     console.log(`Servidor ejecutándose en http://localhost:${PORT}`);
 });
